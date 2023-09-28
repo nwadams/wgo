@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 )
 
 const helptext = `Usage:
@@ -38,11 +39,17 @@ func main() {
 
 	userInterrupt := make(chan os.Signal, 1)
 	signal.Notify(userInterrupt, syscall.SIGTERM, syscall.SIGINT)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	go func() {
 		<-userInterrupt // Soft interrupt.
-		cancel()
+		defer cancel()
+		go func() {
+			<-ctx.Done()
+			if ctx.Err() == context.DeadlineExceeded {
+				log.Fatal("graceful shutdown timed out.. forcing exit.")
+			}
+		}()
 		<-userInterrupt // Hard interrupt.
 		os.Exit(1)
 	}()
